@@ -1,0 +1,11 @@
+.bmad
+.bmad*
+.cursor
+web-bundles/
+node_modules/
+dist/
+.env
+*.log
+.DS_Store
+coverage/
+

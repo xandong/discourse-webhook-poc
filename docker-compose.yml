@@ -1,0 +1,72 @@
+version: '3.8'
+
+services:
+  # RabbitMQ Message Broker
+  rabbitmq:
+    image: rabbitmq:3.12-management-alpine
+    container_name: discourse-rabbitmq
+    ports:
+      - "5672:5672"   # AMQP port
+      - "15672:15672" # Management UI
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - discourse-network
+
+  # Webhook Handler Service
+  handler:
+    build:
+      context: .
+      dockerfile: Dockerfile.handler
+    container_name: discourse-handler
+    ports:
+      - "3000:3000"
+    environment:
+      DISCOURSE_WEBHOOK_SECRET: ${DISCOURSE_WEBHOOK_SECRET:-change_me_in_production}
+      RABBITMQ_URL: amqp://rabbitmq:5672
+      QUEUE_NAME: discourse-events
+      HANDLER_PORT: 3000
+      LOG_LEVEL: info
+      NODE_ENV: development
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - discourse-network
+
+  # Worker Consumer Service
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    container_name: discourse-worker
+    environment:
+      RABBITMQ_URL: amqp://rabbitmq:5672
+      QUEUE_NAME: discourse-events
+      WORKER_CONCURRENCY: 1
+      LOG_LEVEL: info
+      NODE_ENV: development
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - discourse-network
+
+volumes:
+  rabbitmq_data:
+    driver: local
+
+networks:
+  discourse-network:
+    driver: bridge
+
